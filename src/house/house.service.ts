@@ -4,13 +4,19 @@ import { Repository } from 'typeorm';
 import { HouseEntity } from '../entities/secondhandle_house.entity';
 import { ObtainEntity } from '../entities/obtain.entity';
 import { FilterHouseDto, HouseInfoLite } from './dto/filter.dto';
+import { ManagerEntity } from '../entities/manager.entity';
+import { StarEntity } from '../entities/star.entity';
+import { OrderEntity } from '../entities/order.entity';
 
 @Injectable()
 export class HouseService {
 
   constructor(
     @InjectRepository(HouseEntity) private readonly entity: Repository<HouseEntity>,
-    @InjectRepository(ObtainEntity) private readonly obtainEntity: Repository<ObtainEntity>
+    @InjectRepository(ObtainEntity) private readonly obtainEntity: Repository<ObtainEntity>,
+    @InjectRepository(OrderEntity) private readonly orderEnity: Repository<OrderEntity>,
+    @InjectRepository(StarEntity) private readonly starEnity: Repository<StarEntity>,
+    @InjectRepository(ManagerEntity) private readonly managerEntity: Repository<ManagerEntity>
   ) { }
 
   async getFilterHouse(filterHouseDto: FilterHouseDto): Promise<string> {
@@ -25,15 +31,17 @@ export class HouseService {
       labels = await this.obtainEntity.find();
       labels = labels.filter(value => filterHouseDto.label.indexOf(Number(value.label_id)) >= 0).map(value => Number(value.house_id));
     }
-    let res: HouseInfoLite[] = houses
+    let res: HouseInfoLite[] = await Promise.all(houses
       .filter(value => filterHouseDto.Area.indexOf(Number(value.area_id)) >= 0)
       .filter(value => labels.indexOf(Number(value.house_id)) >= 0)
-      .map((value) => ({
+      .map(async (value) => ({
+        house_id: value.house_id,
         house_name: value.house_name,
-        manager_name: value.manager_id.toString(),
-        ifStar: false,
-        ifOrder: false
-      }));
+        manager_name: (await this.managerEntity.findOne({ manager_id: value.manager_id })).manager_name,
+        ifStar: (await this.starEnity.count({ consumer_id: 1, house_id: value.house_id })) >= 1,
+        ifOrder: (await this.orderEnity.count({ consumer_id: 1, house_id: value.house_id })) >= 1,
+      })));
+
 
     return JSON.stringify(res);
   }
